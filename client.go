@@ -61,6 +61,7 @@ func UpgradeAsClient(c net.Conn, url string, r *fasthttp.Request) error {
 	req.Header.AddBytesKV(wsHeaderKey, key)
 	// TODO: Add compression
 
+	req.Header.SetHostBytes(uri.Host())
 	req.SetRequestURIBytes(uri.FullURI())
 
 	br := bufio.NewReader(c)
