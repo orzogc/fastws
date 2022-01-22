@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/dgrr/fastws"
+	"github.com/orzogc/fastws"
 )
 
 func main() {

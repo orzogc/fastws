@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/dgrr/fastws"
+	"github.com/orzogc/fastws"
 	"github.com/valyala/fasthttp"
 )
 

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/buaazp/fasthttprouter"
-	"github.com/dgrr/fastws"
+	"github.com/orzogc/fastws"
 	"github.com/valyala/fasthttp"
 )
 

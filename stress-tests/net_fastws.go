@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/dgrr/fastws"
+	"github.com/orzogc/fastws"
 )
 
 type handler struct{}

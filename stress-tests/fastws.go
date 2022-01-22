@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/dgrr/fastws"
+	"github.com/orzogc/fastws"
 	"github.com/valyala/fasthttp"
 )
 

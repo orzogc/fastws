@@ -134,6 +134,10 @@ func (upgr *Upgrader) Upgrade(ctx *fasthttp.RequestCtx) {
 			})
 
 			ctx.Hijack(func(c net.Conn) {
+				if c == nil {
+					return
+				}
+
 				conn := acquireConn(c)
 				// stablishing default options
 				conn.server = true
