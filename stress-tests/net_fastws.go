@@ -16,8 +16,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			m   fastws.Mode
 		)
 
-		c.ReadTimeout = 0
-		c.WriteTimeout = 0
+		c.SetReadTimeout(0)
+		c.SetWriteTimeout(0)
 
 		for {
 			m, bf, err = c.ReadMessage(bf[:0])

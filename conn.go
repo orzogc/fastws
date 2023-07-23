@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/atomic"
 )
 
 // Mode is the mode in which the bytes are sended.
@@ -54,11 +56,11 @@ type Conn struct {
 	// Mode indicates Write default mode.
 	Mode Mode
 
-	// ReadTimeout ...
-	ReadTimeout time.Duration
+	// readTimeout ...
+	readTimeout *atomic.Duration
 
-	// WriteTimeout ...
-	WriteTimeout time.Duration
+	// writeTimeout ...
+	writeTimeout *atomic.Duration
 
 	// MaxPayloadSize prevents huge memory allocation.
 	//
@@ -86,6 +88,16 @@ func (conn *Conn) RemoteAddr() net.Addr {
 	return conn.c.RemoteAddr()
 }
 
+// SetReadTimeout sets the reading timeout
+func (conn *Conn) SetReadTimeout(timeout time.Duration) {
+	conn.readTimeout.Store(timeout)
+}
+
+// SetWriteTimeout sets the writing timeout
+func (conn *Conn) SetWriteTimeout(timeout time.Duration) {
+	conn.writeTimeout.Store(timeout)
+}
+
 func acquireConn(c net.Conn) (conn *Conn) {
 	ci := connPool.Get()
 	if ci != nil {
@@ -108,8 +120,8 @@ const DefaultPayloadSize = 1 << 20
 func (conn *Conn) Reset(c net.Conn) {
 	conn.framer = make(chan *Frame, 128)
 	conn.errch = make(chan error, 128)
-	conn.ReadTimeout = defaultDeadline
-	conn.WriteTimeout = defaultDeadline
+	conn.readTimeout = atomic.NewDuration(defaultDeadline)
+	conn.writeTimeout = atomic.NewDuration(defaultDeadline)
 	conn.MaxPayloadSize = DefaultPayloadSize
 	conn.compress = false
 	conn.server = false
@@ -136,11 +148,18 @@ func (conn *Conn) readLoop() {
 		fr := AcquireFrame()
 		fr.SetPayloadSize(conn.MaxPayloadSize)
 
-		if conn.ReadTimeout > 0 {
-			conn.c.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
+		readTimeout := conn.readTimeout.Load()
+		if readTimeout > 0 {
+			conn.lck.Lock()
+			conn.c.SetReadDeadline(time.Now().Add(readTimeout))
+			conn.lck.Unlock()
 		}
 		_, err := fr.ReadFrom(conn.bf)
+
+		conn.lck.Lock()
 		conn.c.SetReadDeadline(zeroTime)
+		conn.lck.Unlock()
+
 		if err != nil {
 			if err != EOF && !strings.Contains(err.Error(), "closed") {
 				var (
@@ -177,8 +196,9 @@ func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 
 	fr.SetPayloadSize(conn.MaxPayloadSize)
 
-	if conn.WriteTimeout > 0 {
-		conn.c.SetWriteDeadline(time.Now().Add(conn.WriteTimeout))
+	writeTimeout := conn.writeTimeout.Load()
+	if writeTimeout > 0 {
+		conn.c.SetWriteDeadline(time.Now().Add(writeTimeout))
 	}
 
 	nn, err := fr.WriteTo(conn.bf)
@@ -194,8 +214,9 @@ func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 // ReadFrame fills fr with the next connection frame.
 func (conn *Conn) ReadFrame(fr *Frame) (nn int, err error) {
 	var expire <-chan time.Time
-	if conn.ReadTimeout > 0 {
-		timer := time.NewTimer(conn.ReadTimeout)
+	readTimeout := conn.readTimeout.Load()
+	if readTimeout > 0 {
+		timer := time.NewTimer(readTimeout)
 		expire = timer.C
 		defer timer.Stop()
 	}
@@ -435,7 +456,7 @@ func (conn *Conn) sendClose(status StatusCode, b []byte) (err error) {
 		fr.Mask()
 	}
 
-	if conn.WriteTimeout == 0 {
+	if conn.writeTimeout.Load() == 0 {
 		conn.lck.Lock()
 		conn.c.SetWriteDeadline(time.Now().Add(time.Second * 5))
 		conn.lck.Unlock()
@@ -458,6 +479,8 @@ func (conn *Conn) ReplyClose() (err error) {
 	if !conn.server {
 		fr.Mask()
 	}
+
+	// TODO: reply status code
 
 	conn.WriteFrame(fr)
 
