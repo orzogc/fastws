@@ -136,7 +136,11 @@ func (conn *Conn) readLoop() {
 		fr := AcquireFrame()
 		fr.SetPayloadSize(conn.MaxPayloadSize)
 
+		if conn.ReadTimeout > 0 {
+			conn.c.SetReadDeadline(time.Now().Add(conn.ReadTimeout))
+		}
 		_, err := fr.ReadFrom(conn.bf)
+		conn.c.SetReadDeadline(zeroTime)
 		if err != nil {
 			if err != EOF && !strings.Contains(err.Error(), "closed") {
 				var (
@@ -178,10 +182,10 @@ func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 	}
 
 	nn, err := fr.WriteTo(conn.bf)
+	conn.c.SetWriteDeadline(zeroTime)
 	if err == nil {
 		err = conn.bf.Flush()
 	}
-	conn.c.SetWriteDeadline(zeroTime)
 	conn.lck.Unlock()
 
 	return int(nn), err
