@@ -312,7 +312,7 @@ func (conn *Conn) checkRequirements(fr *Frame, betweenContinuation bool) (c bool
 		if !isFin && !betweenContinuation {
 			err = errControlMustNotBeFragmented
 		} else {
-			err = conn.ReplyClose(fr)
+			err = conn.ReplyClose()
 			if err == nil {
 				err = EOF
 			}
@@ -449,12 +449,15 @@ func (conn *Conn) sendClose(status StatusCode, b []byte) (err error) {
 var errNilFrame = errors.New("frame cannot be nil")
 
 // ReplyClose is used to reply to CodeClose.
-func (conn *Conn) ReplyClose(fr *Frame) (err error) {
-	if fr == nil {
-		return errNilFrame
-	}
+func (conn *Conn) ReplyClose() (err error) {
+	fr := AcquireFrame()
+	defer ReleaseFrame(fr)
+
 	fr.SetFin()
 	fr.SetClose()
+	if !conn.server {
+		fr.Mask()
+	}
 
 	conn.WriteFrame(fr)
 
