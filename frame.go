@@ -413,11 +413,22 @@ func (fr *Frame) setLength(n int) {
 	fr.op[1] |= uint8(n)
 }
 
-// Mask performs the masking of the current payload
+// Mask sets the mask key and enables the mask bit
 func (fr *Frame) Mask() {
 	fr.op[1] |= maskBit
 	readMask(fr.mask)
-	if len(fr.b) > 0 {
+}
+
+// DoMask performs the masking of the current payload
+func (fr *Frame) DoMask() {
+	if fr.hasStatus() {
+		payload := make([]byte, len(fr.status)+len(fr.b))
+		payload = append(payload, fr.status...)
+		payload = append(payload, fr.b...)
+		mask(fr.mask, payload)
+		fr.b = payload
+		fr.parseStatus()
+	} else if len(fr.b) > 0 {
 		mask(fr.mask, fr.b)
 	}
 }
@@ -452,7 +463,11 @@ func (fr *Frame) WriteTo(wr io.Writer) (n int64, err error) {
 			}
 		}
 		if err == nil {
-			if fr.hasStatus() {
+			hasStatus := fr.hasStatus()
+			if fr.IsMasked() {
+				fr.DoMask()
+			}
+			if hasStatus {
 				ni, err = wr.Write(fr.status)
 				if ni > 0 {
 					n += int64(ni)
@@ -559,12 +574,9 @@ func (fr *Frame) readFrom(r io.Reader) (int64, error) {
 					panic("uint64 to int64 conversion gave a negative number")
 				}
 
-				isClose := fr.IsClose()
-				if isClose {
-					nn -= 2
-					if nn < 0 {
-						err = errStatusLen
-					}
+				// close frame's payload must be zero or greater than one
+				if fr.IsClose() && nn == 1 {
+					err = errReadingMask
 				}
 
 				if err == nil && nn > 0 {
@@ -572,17 +584,8 @@ func (fr *Frame) readFrom(r io.Reader) (int64, error) {
 						fr.b = append(fr.b[:cap(fr.b)], make([]byte, rLen)...)
 					}
 
-					if isClose {
-						n, err = io.ReadFull(r, fr.status[:2])
-						if err == io.ErrUnexpectedEOF {
-							err = errStatusLen
-						}
-					}
-
-					if err == nil {
-						fr.b = fr.b[:nn]
-						n, err = io.ReadFull(r, fr.b)
-					}
+					fr.b = fr.b[:nn]
+					n, err = io.ReadFull(r, fr.b)
 				}
 			}
 		}
