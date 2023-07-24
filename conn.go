@@ -150,15 +150,10 @@ func (conn *Conn) readLoop() {
 
 		readTimeout := conn.readTimeout.Load()
 		if readTimeout > 0 {
-			conn.lck.Lock()
 			conn.c.SetReadDeadline(time.Now().Add(readTimeout))
-			conn.lck.Unlock()
 		}
 		_, err := fr.ReadFrom(conn.bf)
-
-		conn.lck.Lock()
 		conn.c.SetReadDeadline(zeroTime)
-		conn.lck.Unlock()
 
 		if err != nil {
 			if err != EOF && !strings.Contains(err.Error(), "closed") {
@@ -188,11 +183,12 @@ func (conn *Conn) readLoop() {
 // WriteFrame writes fr to the connection endpoint.
 func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 	conn.lck.Lock()
-	defer conn.lck.Unlock()
-
 	if conn.closed {
+		conn.lck.Unlock()
 		return 0, EOF
 	}
+	conn.lck.Unlock()
+
 	// TODO: Compress
 
 	fr.SetPayloadSize(conn.MaxPayloadSize)
@@ -458,9 +454,7 @@ func (conn *Conn) sendClose(status StatusCode, b []byte) (err error) {
 	}
 
 	if conn.writeTimeout.Load() == 0 {
-		conn.lck.Lock()
 		conn.c.SetWriteDeadline(time.Now().Add(time.Second * 5))
-		conn.lck.Unlock()
 	}
 	_, err = conn.WriteFrame(fr)
 	ReleaseFrame(fr)
