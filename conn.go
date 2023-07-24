@@ -183,11 +183,11 @@ func (conn *Conn) readLoop() {
 // WriteFrame writes fr to the connection endpoint.
 func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 	conn.lck.Lock()
+	defer conn.lck.Unlock()
+
 	if conn.closed {
-		conn.lck.Unlock()
 		return 0, EOF
 	}
-	conn.lck.Unlock()
 
 	// TODO: Compress
 
