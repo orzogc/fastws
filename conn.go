@@ -182,9 +182,6 @@ func (conn *Conn) readLoop() {
 
 // WriteFrame writes fr to the connection endpoint.
 func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
-	conn.lck.Lock()
-	defer conn.lck.Unlock()
-
 	if conn.closed.Load() {
 		return 0, EOF
 	}
@@ -198,6 +195,8 @@ func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 		conn.c.SetWriteDeadline(time.Now().Add(writeTimeout))
 	}
 
+	conn.lck.Lock()
+	defer conn.lck.Unlock()
 	nn, err := fr.WriteTo(conn.bf)
 	conn.c.SetWriteDeadline(zeroTime)
 	if err == nil {
@@ -512,7 +511,9 @@ func (conn *Conn) mustClose(wait bool) error {
 	}
 	conn.closed.Store(true)
 
+	conn.lck.Lock()
 	conn.bf.Flush()
+	conn.lck.Unlock()
 	close(conn.errch)
 
 	if wait {
