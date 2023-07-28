@@ -40,7 +40,7 @@ var (
 type Conn struct {
 	c      net.Conn
 	bf     *bufio.ReadWriter
-	closed bool
+	closed *atomic.Bool
 	wg     sync.WaitGroup
 
 	framer chan *Frame
@@ -135,7 +135,7 @@ func (conn *Conn) Reset(c net.Conn) {
 		}
 		conn.bf = bufio.NewReadWriter(br, bufio.NewWriter(c))
 	}
-	conn.closed = false
+	conn.closed = atomic.NewBool(false)
 	conn.wg.Add(1)
 	go conn.readLoop()
 }
@@ -166,7 +166,7 @@ func (conn *Conn) readLoop() {
 				case errn, ok = <-conn.errch:
 				default:
 				}
-				if ok {
+				if ok && !conn.closed.Load() {
 					if errn != nil {
 						conn.errch <- errn
 					}
@@ -185,7 +185,7 @@ func (conn *Conn) WriteFrame(fr *Frame) (int, error) {
 	conn.lck.Lock()
 	defer conn.lck.Unlock()
 
-	if conn.closed {
+	if conn.closed.Load() {
 		return 0, EOF
 	}
 
@@ -493,12 +493,9 @@ func (conn *Conn) Close() error {
 //
 // When connection is handled by server the connection is closed automatically.
 func (conn *Conn) CloseString(b string) error {
-	conn.lck.Lock()
-	if conn.closed {
-		conn.lck.Unlock()
+	if conn.closed.Load() {
 		return EOF
 	}
-	conn.lck.Unlock()
 
 	var bb []byte
 	if b != "" {
@@ -510,13 +507,10 @@ func (conn *Conn) CloseString(b string) error {
 }
 
 func (conn *Conn) mustClose(wait bool) error {
-	conn.lck.Lock()
-	if conn.closed {
-		conn.lck.Unlock()
+	if conn.closed.Load() {
 		return EOF
 	}
-	conn.closed = true
-	conn.lck.Unlock()
+	conn.closed.Store(true)
 
 	conn.bf.Flush()
 	close(conn.errch)
