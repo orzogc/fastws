@@ -157,19 +157,7 @@ func (conn *Conn) readLoop() {
 
 		if err != nil {
 			if err != EOF && !strings.Contains(err.Error(), "closed") {
-				var (
-					ok   = true // it can only be false
-					errn error
-				)
-
-				select {
-				case errn, ok = <-conn.errch:
-				default:
-				}
-				if ok && !conn.closed.Load() {
-					if errn != nil {
-						conn.errch <- errn
-					}
+				if !conn.closed.Load() {
 					conn.errch <- err
 				}
 			}
@@ -510,11 +498,11 @@ func (conn *Conn) mustClose(wait bool) error {
 		return EOF
 	}
 	conn.closed.Store(true)
+	defer close(conn.errch)
 
 	conn.lck.Lock()
 	conn.bf.Flush()
 	conn.lck.Unlock()
-	close(conn.errch)
 
 	if wait {
 		var fr *Frame

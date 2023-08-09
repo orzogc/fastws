@@ -2,7 +2,6 @@ package fastws
 
 import (
 	"net/http"
-	"reflect"
 	"unsafe"
 
 	"github.com/valyala/fasthttp"
@@ -27,17 +26,11 @@ func NetUpgrade(handler RequestHandler) func(http.ResponseWriter, *http.Request)
 }
 
 func b2s(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 func s2b(s string) []byte {
-	sh := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	bh := reflect.SliceHeader{
-		Data: sh.Data,
-		Len:  sh.Len,
-		Cap:  sh.Len,
-	}
-	return *(*[]byte)(unsafe.Pointer(&bh))
+	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
 func equalsFold(b, s []byte) (equals bool) {
